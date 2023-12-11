@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# A really dumb script for making a quick tarball of Exim
+
+set -e
+trap 'test -n "$TMP_DIR" && rm -r "$TMP_DIR"' EXIT
+commit="${1:-HEAD}"
+version=`git describe "$commit"`
+`dirname $0`/mk_exim_release --no-sizes --no-doc --comp gzip --no-sig --quick "$commit" .
+echo $version*

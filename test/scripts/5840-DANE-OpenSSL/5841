@@ -1,0 +1,29 @@
+# DANE client: ciphers option
+#
+exim -DSERVER=server -bd -oX PORT_D
+****
+
+### Baseline, dane unused
+exim -odf CALLER@localhost.test.ex
+Testing
+****
+### Baseline, dane used
+exim -odf CALLER@dane256ee.test.ex
+Testing
+****
+#
+#
+### Dane cipher specified, dane unused
+# Since dane unused, should get the same cipher as the baseline
+exim -odf -DLIST=DHE-RSA-CAMELLIA256-SHA CALLER@localhost.test.ex
+Testing
+****
+### Dane cipher specified, dane used
+# Should get the cipher specified here
+exim -odf -DLIST=DHE-RSA-CAMELLIA256-SHA CALLER@dane256ee.test.ex
+Testing
+****
+#
+#
+killdaemon
+no_msglog_check

@@ -1,0 +1,31 @@
+From MAILER-DAEMON Tue Mar 02 09:44:33 1999
+Return-path: <>
+Received: from localhost ([127.0.0.1] helo=testhost.test.ex)
+	by testhost.test.ex with esmtps (TLS1.x:ke-RSA-AES256-SHAnnn:xxx)
+	(Exim x.yz)
+	id 10HmaX-0005vi-00
+	for z@test.ex;
+	Tue, 2 Mar 1999 09:44:33 +0000
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=test.ex;
+	s=sel; h=Subject; bh=rr4Eahuyisf50jrZwCMRa+NKEI5cjCTLtiI8sXRsvJo=; b=DMx6DGzU
+	7Pbz5IGN4NvxeDHYJIVnSMRO0q5PBiGMoaESCZFhQF+fZ7f+kZyNY1Uanggg93Ux7OeQ3ZThnAg4t
+	1xm24pdfYtXKleKtsZ2ekh6SNXo2YcyclIo8hf4z3iZsjxcjnftZRbtaeAc3Coicq0+51i+/ZxCup
+	EwFMsq92M=;
+Received: from [127.0.0.1] (helo=xxx)
+	by testhost.test.ex with smtps (TLS1.x:ke-RSA-AES256-SHAnnn:xxx)
+	(Exim x.yz)
+	(envelope-from <CALLER@bloggs.com>)
+	id 10HmaZ-0005vi-00
+	for z@test.ex;
+	Tue, 2 Mar 1999 09:44:33 +0000
+Subject: simple test
+X-body-linecount: 0
+X-message-linecount: 19
+X-received-count: 2
+
+Line 1: This is a simple test.
+Line 2: This is a simple test.
+.Line 3 has a leading dot
+extra30chars234567890123456789
+last line: 4
+

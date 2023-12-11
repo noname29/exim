@@ -1,0 +1,108 @@
+# Exim test configuration 4560
+
+SERVER=
+VALUE=
+INSERT=
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = test.ex
+
+# ----- Main settings -----
+
+acl_smtp_rcpt = accept
+acl_smtp_data = check_data
+
+log_selector = +received_recipients +dkim_verbose
+queue_only
+queue_run_in_order
+
+# ----- ACL -----
+begin acl
+
+check_data:
+  warn	!verify =	arc VALUE
+	INSERT
+
+  warn	logwrite =	arc_state:      <$arc_state>
+	logwrite =	domains:        <$arc_domains>
+	logwrite =	arc_oldest_pass <$arc_oldest_pass>
+	logwrite =	reason:         <$arc_state_reason>
+	logwrite =	lh_A-R:         <$lh_Authentication-Results:>
+	logwrite =	lh-ams:         <$lh_ARC-Authentication-Results:>
+#	logwrite =	oldest-p-ams:   <${listextract {$arc_oldest_pass} {$lh_ARC-Authentication-Results:}}>
+	logwrite =	oldest-p-ams:   <${reduce {$lh_ARC-Authentication-Results:} \
+						{} \
+						{${if = {$arc_oldest_pass} \
+							{${extract {i}{${extract {1}{;}{$item}}}}} \
+							{$item} {$value}}} \
+					}>
+
+.ifdef OPTION
+  accept
+.else
+  accept add_header =	:at_start:${authresults {$primary_hostname}}
+.endif
+  
+# ----- Routers -----
+
+begin routers
+
+d1:
+  driver = accept
+  local_parts = ^a
+  transport = tfile
+
+r2:
+  driver =	redirect
+  local_parts = ^m
+  data =	${substr_1:$local_part}@$domain
+  redirect_router = mlist
+
+redir:
+  driver =	redirect
+  data =	${substr_1:$local_part}@$domain
+  redirect_router = fwd
+
+fwd:
+  driver =	accept
+  transport =	tsmtp
+
+mlist:
+  driver =	accept
+  transport =	tmlist
+
+# ----- Transports -----
+
+begin transports
+
+tfile:
+  driver =	appendfile
+  file =	DIR/test-mail/$local_part
+  create_file =	DIR/test-mail
+  user =	CALLER
+
+tsmtp:
+  driver =	smtp
+  hosts =	127.0.0.1
+  port =	PORT_D
+  allow_localhost
+.ifndef OPTION
+.ifdef BAD
+  arc_sign =	$primary_hostname : sel : MISSING_KEY
+.else
+  arc_sign =	$primary_hostname : sel : DIR/aux-fixed/dkim/dkim.private
+.endif
+.endif
+
+tmlist:
+  driver =	smtp
+  hosts =	127.0.0.1
+  port =	PORT_D
+  allow_localhost
+  transport_filter =	/bin/cat - DIR/aux-fixed/TESTNUM.mlistfooter
+.ifndef OPTION
+  arc_sign =	$primary_hostname : sel : DIR/aux-fixed/dkim/dkim.private
+.endif
+
+# End

@@ -1,0 +1,17 @@
+1999-03-02 09:44:33 1: Server sends good staple on request
+1999-03-02 09:44:33 2: Server does not staple an outdated response
+1999-03-02 09:44:33 3: Server does not staple a response for a revoked cert
+1999-03-02 09:44:33 4: Connection functions when server is prepared to staple but client does not request it
+
+******** SERVER ********
+1999-03-02 09:44:33 exim x.yz daemon started: pid=pppp, no queue runs, listening for SMTP on port PORT_D
+1999-03-02 09:44:33 acl_conn: ocsp in status: 0 (notreq)
+1999-03-02 09:44:33 acl_mail: ocsp in status: 1 (notresp)
+1999-03-02 09:44:33 exim x.yz daemon started: pid=pppp, no queue runs, listening for SMTP on port PORT_D
+1999-03-02 09:44:33 acl_conn: ocsp in status: 0 (notreq)
+1999-03-02 09:44:33 TLS error on connection from (rhu.barb) [ip4.ip4.ip4.ip4] (gnutls_certificate_set_ocsp_status_request_file2): The session or certificate has expired.
+1999-03-02 09:44:33 exim x.yz daemon started: pid=pppp, no queue runs, listening for SMTP on port PORT_D
+1999-03-02 09:44:33 acl_conn: ocsp in status: 0 (notreq)
+1999-03-02 09:44:33 TLS error on connection from (rhu.barb) [ip4.ip4.ip4.ip4] (gnutls_certificate_set_ocsp_status_request_file2): The session or certificate has expired.
+1999-03-02 09:44:33 exim x.yz daemon started: pid=pppp, no queue runs, listening for SMTP on port PORT_D
+1999-03-02 09:44:33 acl_conn: ocsp in status: 0 (notreq)

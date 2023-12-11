@@ -1,0 +1,31 @@
+# Exim test configuration 0153
+
+.include DIR/aux-var/std_conf_prefix
+
+
+# ----- Main settings -----
+
+
+# ----- Routers -----
+
+begin routers
+
+virtual:
+  driver = redirect
+  domains = *.virt.test.ex
+  data = ${lookup {$local_part} lsearch \
+		{${lookup {TESTNUM.alias.$1} dsearch,ret=full {DIR/aux-fixed} {$value}fail}}}
+  no_more
+
+list:
+  driver = redirect
+  domains = list.test.ex
+  file = ${lookup {TESTNUM.list.$local_part} dsearch,ret=full {DIR/aux-fixed} {$value}fail}
+  no_more
+
+real:
+  driver = accept
+  verify_only
+
+
+# End

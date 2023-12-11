@@ -1,0 +1,78 @@
+# pipelined-connect, client
+#
+# Not attempted when not advertised
+exim -bd -DSERVER=server -oX PORT_D
+****
+#
+exim notadvertised@test.ex
+Subject: test 1
+
+****
+exim -DCONTROL=127.0.0.1 -q
+****
+killdaemon
+exim -DNOTDAEMON -DSERVER=server -q
+****
+#
+#
+#
+# Not attempted without a cache entry
+exim -bd -DSERVER=server -DCONNECTCOND=* -oX PORT_D
+****
+#
+exim nocache@test.ex
+Subject test 2
+
+****
+exim -DCONTROL=127.0.0.1 -q
+****
+exim -DNOTDAEMON -DSERVER=server -q
+****
+#
+#
+#
+# Go for it.  This one should do early-pipelinng.
+exim hascache@test.ex
+Subject test 3
+
+****
+exim -DCONTROL=127.0.0.1 -q
+****
+exim -DNOTDAEMON -DSERVER=server -q
+****
+#
+#
+# Check that client doesn't try when not told to, even now there is
+# a cache entry
+exim clientno@test.ex
+Subject test 4
+
+****
+exim -DCONTROL=: -q
+****
+exim -DNOTDAEMON -DSERVER=server -q
+****
+#
+#
+# Check that client doesn't try when transport uses $sending_ip_address in
+# helo_data
+exim helo_data@test.ex
+Subject test 5
+****
+exim -DCONTROL=127.0.0.1 -DHELO_MSG='$sending_ip_address' -q
+****
+exim -DNOTDAEMON -DSERVER=server -q
+****
+#
+# ... unless the connection is bound to a specified interface
+exim helo_data_bound@test.ex
+Subject test 6
+****
+exim -DCONTROL=127.0.0.1 -DHELO_MSG='$sending_ip_address' -DBB=127.0.0.1 -q
+****
+exim -DNOTDAEMON -DSERVER=server -q
+****
+#
+#
+killdaemon
+no_msglog_check

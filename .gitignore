@@ -1,0 +1,9 @@
+exim-*
+!/test/aux-fixed/exim-ca
+*~
+*.bak
+.*.swp
+*.patch
+*.orig
+*.rej
+.gdb_history

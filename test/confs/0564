@@ -1,0 +1,29 @@
+# Exim test configuration 0564
+
+exim_path = EXIM_PATH
+keep_environment =
+host_lookup_order = bydns
+spool_directory = DIR/spool
+log_file_path = DIR/spool/log/%slog
+gecos_pattern = ""
+gecos_name = CALLER_NAME
+chunking_advertise_hosts =
+tls_advertise_hosts =
+.ifdef _HAVE_PIPE_CONNECT
+pipelining_connect_advertise_hosts =
+.endif
+.ifdef _HAVE_DMARC
+dmarc_tld_file =
+.endif
+.ifdef _OPT_MAIN_LIMITS_ADVERTISE_HOSTS
+limits_advertise_hosts = !*
+.endif
+
+# ----- Main settings -----
+
+acl_smtp_rcpt = accept
+acl_smtp_data = accept
+
+queue_only
+
+# End

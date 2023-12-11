@@ -1,0 +1,25 @@
+# Exim test configuration 4001: multiple messages in connection
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+queue_only
+
+# ----- Main settings -----
+
+acl_smtp_rcpt = accept
+acl_smtp_mime = check_mime
+acl_smtp_data =	check_data
+
+# ----- ACL -----
+
+begin acl
+
+check_mime:
+  accept	decode  = default
+		logwrite = mime_acl: mime_part_count $mime_part_count
+
+check_data:
+  accept	logwrite = mime_acl: mime_part_count $mime_part_count
+
+# End

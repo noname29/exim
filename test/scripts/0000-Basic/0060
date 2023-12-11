@@ -1,0 +1,74 @@
+# Relay by hostlist match for host name or IP address
+exim -bh V4NET.0.0.1
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.0.0.2
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.0.0.5
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.0.0.6
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.255.0.1
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.255.0.2
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.255.0.3
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+exim -bh V4NET.255.0.4
+helo test
+mail from:<userx@somehost.example.com>
+rcpt to:<userx@test.ex>
+rcpt to:<userx@anotherhost.example.com>
+data
+.
+quit
+****
+no_msglog_check

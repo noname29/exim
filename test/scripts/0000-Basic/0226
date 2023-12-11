@@ -1,0 +1,8 @@
+# redirect: file and pipe addresses
+exim -odi file1@no.test.ex pipe1@no.test.ex
+Message 1
+****
+exim -odi file2@yes.test.ex pipe2@yes.test.ex
+Message 2
+****
+no_msglog_check

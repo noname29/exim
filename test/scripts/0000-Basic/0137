@@ -1,0 +1,34 @@
+# mailbox locking
+exim -odi -f t1@foo userx
+Subject: First
+
+local_delivery
+First message.
+****
+exim_lock -v test-mail/userx
+exim -odi -f t1@foo userx
+Subject: Second
+
+local_delivery
+Second message
+****
+exim -qf
+****
+exim_lock -v -fcntl test-mail/userx
+exim -odi -f t2@foo userx
+Subject: Third
+
+local_delivery_fcntl
+Third message
+****
+exim -qf
+****
+exim_lock -v -fcntl test-mail/userx
+exim -odi -f t3@foo userx
+Subject: Fourth
+
+local_delivery_fcntl_blocking
+Fourth message
+****
+exim -qf
+****

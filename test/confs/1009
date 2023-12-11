@@ -1,0 +1,51 @@
+# Exim test configuration 1009
+
+OPT=
+
+.include DIR/aux-var/std_conf_prefix
+
+
+# ----- Main settings -----
+
+queue_run_in_order
+
+
+# ----- Routers -----
+
+begin routers
+
+.ifdef ROUTE_DATA
+r0:
+  driver = manualroute
+  route_data = ROUTE_DATA OPT
+  transport = t1
+  self = send
+
+.else
+
+r1:
+  driver = dnslookup
+  transport = t1
+  self = send
+  OPT
+.endif
+
+
+# ----- Transports -----
+
+begin transports
+
+t1:
+  driver = smtp
+  port = PORT_S
+  hosts_try_fastopen =	:
+
+
+# ----- Retry -----
+
+begin retry
+
+* *  F,1d,2h
+
+
+# End

@@ -1,0 +1,10 @@
+# log_message with warn
+need_ipv4
+#
+exim -bs
+helo test
+mail from:<BAD@y>
+rcpt to:<OK@x>
+rcpt to:<BAD@x>
+quit
+****

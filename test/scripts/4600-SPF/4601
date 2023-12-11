@@ -1,0 +1,37 @@
+# lookup string-expansion
+#
+exim -bd -DSERVER=server -oX PORT_D:PORT_S
+****
+client 127.0.0.1 PORT_D
+??? 220
+helo testclient
+??? 250
+mail from:<a@example.com>
+??? 250
+rcpt to:<fred@test.ex>
+??? 250
+quit
+****
+client 127.0.0.1 PORT_S
+??? 220
+helo testclient
+??? 250
+mail from:<b@example.com>
+??? 250
+rcpt to:<fred@test.ex>
+??? 250
+quit
+****
+#
+killdaemon
+#
+#
+#
+exim -be
+eDNS_NOMATCH       none      ${lookup {fred@v6.test.ex} spf {HOSTIPV4}}
+eDNS_AGAIN         temperror ${lookup {fred@test.again.dns} spf {HOSTIPV4}}
+multiple rr        permerror ${lookup {fred@double.example.com} spf {8.8.8.8}}
+multi + non-spf    permerror ${lookup {fred@doubleplus.example.com} spf {8.8.8.8}}
+uppercase in v=    pass      ${lookup {fred@uppercase.example.com} spf {HOSTIPV4}}
+only non-spf txt   none      ${lookup {fred@test.ex} spf {HOSTIPV4}}
+****

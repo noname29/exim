@@ -1,0 +1,44 @@
+# Exim test configuration 0386
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+
+# ----- Main settings -----
+
+acl_smtp_rcpt = chk_rcpt
+qualify_domain = test.ex
+trusted_users = CALLER
+
+
+# ----- ACL -----
+begin acl
+
+chk_rcpt:
+  accept	local_parts = 1
+		endpass
+		acl = DIR/aux-fixed/TESTNUM.acl1
+  accept	local_parts = 2
+		endpass
+		acl = DIR/aux-fixed/TESTNUM.acl2
+
+# ----- Routers -----
+
+begin routers
+
+r1:
+  driver = accept
+  transport = t1
+
+# ----- Transports -----
+
+begin transports
+
+t1:
+  driver = appendfile
+  file = DIR/test-mail/$local_part
+  create_file = DIR/test-mail
+  user = CALLER
+
+
+# End

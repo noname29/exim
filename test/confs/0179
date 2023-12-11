@@ -1,0 +1,45 @@
+# Exim test configuration 0179
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+
+# ----- Main settings -----
+
+queue_run_in_order
+# incoming_interface is used here to get the _outgoing_ local port
+log_selector = +outgoing_port +incoming_interface +received_recipients
+
+
+# ----- Routers -----
+
+begin routers
+
+all:
+  driver = manualroute
+  route_list = * 127.0.0.1 byname
+  self = send
+  transport = smtp
+  errors_to = ""
+  no_more
+
+
+# ----- Transports -----
+
+begin transports
+
+smtp:
+  driver = smtp
+  port = PORT_S
+  hosts_try_fastopen = :
+
+
+# ----- Retry -----
+
+
+begin retry
+
+* * F,2h,15m
+
+
+# End

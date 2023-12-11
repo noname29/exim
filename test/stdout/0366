@@ -1,0 +1,1 @@
+Retry rule: ^[^@]+@ten-  *  F,4s,1s; 

@@ -1,0 +1,65 @@
+# Exim test configuration 0284
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+
+# ----- Main settings -----
+
+qualify_domain = test.ex
+
+
+# ----- Routers -----
+
+begin routers
+
+all:
+  driver = accept
+  address_data = ${if match{$local_part}{^(.)}{$1}}
+  transport = ${if eq {${substr_-1_1:$local_part}}{1} {t1} \
+		{${if eq {${substr_-1_1:$local_part}}{2} {t2} \
+		  {${if eq {${substr_-1_1:$local_part}}{3} {t3} {t4}}}}}}
+
+
+# ----- Transports -----
+
+begin transports
+
+t1:
+  driver = appendfile
+  batch_max = 100
+  file = DIR/test-mail/batched
+  envelope_to_add
+  user = CALLER
+
+t2:
+  driver = appendfile
+  batch_max = 100
+  file = DIR/test-mail/$local_part
+  create_file = DIR/test-mail
+  envelope_to_add
+  user = CALLER
+
+t3:
+  driver = appendfile
+  batch_max = 100
+  file = DIR/test-mail/$domain
+  create_file = DIR/test-mail
+  envelope_to_add
+  user = CALLER
+
+t4:
+  driver = appendfile
+  batch_max = 100
+  batch_id = $address_data
+  file = DIR/test-mail/batched
+  envelope_to_add
+  user = CALLER
+
+# ----- Retry -----
+
+begin retry
+
+* * F,1d,1d
+
+# End

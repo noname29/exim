@@ -1,0 +1,31 @@
+# OCSP stapling, server, multiple leaf-certs
+#
+#
+#
+exim -z '1: Server sends good staple on request, to client requiring RSA auth'
+****
+#
+exim -bd -oX PORT_D -DSERVER=server
+****
+exim -odf -DSELECTOR=auth_rsa rsa.auth@test.ex
+Subject: test
+
+.
+****
+killdaemon
+#
+#
+#
+#
+exim -z '2: Server sends good staple on request, to client preferring ECDSA auth'
+****
+#
+exim -bd -oX PORT_D -DSERVER=server
+****
+exim -odf -DSELECTOR=auth_ecdsa ecdsa.auth@test.ex
+Subject: test
+
+.
+****
+killdaemon
+no_msglog_check

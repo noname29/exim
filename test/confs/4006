@@ -1,0 +1,34 @@
+# Exim test configuration 4006
+# Content-scan: clamav interface
+
+OPT=
+SRV=unset
+CONTROL=
+
+.include DIR/aux-var/std_conf_prefix
+
+log_selector = +subject
+primary_hostname = myhost.test.ex
+
+av_scanner = clamd : SRV CONTROL
+
+# ----- Main settings -----
+
+acl_smtp_rcpt = accept
+acl_smtp_data = c_data
+
+begin acl
+
+c_data:
+  accept !malware = * OPT
+  deny	 logwrite = malware_name $malware_name
+
+# ----- Routers -----
+
+begin routers
+
+r:
+  driver = redirect
+  data = :blackhole:
+
+# End

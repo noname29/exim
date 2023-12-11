@@ -1,0 +1,7 @@
+# Continuations in file ACL
+exim -odq -bs
+helo test
+mail from:<>
+rcpt to:<x@y>
+quit
+****

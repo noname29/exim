@@ -1,0 +1,10 @@
+# "extra_headers" argument in "mail" in user filter
+exim -DFILTER=1 -odi userx
+fno: 1
+This is a message.
+****
+exim -DFILTER=2 -odi userx
+fno: 2
+Another message 
+****
+no_msglog_check

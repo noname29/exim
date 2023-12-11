@@ -1,0 +1,7 @@
+# dnslist when no host address
+exim -bs
+helo test
+mail from:<userx@test.ex>
+rcpt to:<userx@test.again.dns>
+quit
+****

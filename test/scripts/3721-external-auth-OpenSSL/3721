@@ -1,0 +1,38 @@
+# External authentication (server & client)
+munge tls_anycipher
+#
+exim -DSERVER=server -bd -oX PORT_D
+****
+#
+#
+client-ssl 127.0.0.1 PORT_D 127.0.0.1 DIR/aux-fixed/exim-ca/example.org/server2.example.org/server2.example.org.pem DIR/aux-fixed/exim-ca/example.org/server2.example.org/server2.example.org.unlocked.key
+??? 220
+EHLO tester
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250-STARTTLS
+??? 250 HELP
+STARTTLS
+??? 220
+EHLO tester
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250-AUTH EXTERNAL
+??? 250 HELP
+AUTH EXTERNAL c2VydmVyMi5leGFtcGxlLm9yZw==
+??? 235
+quit
+??? 221
+****
+#
+exim -f ok@test.ex x@y
+****
+exim -q
+****
+#
+killdaemon
+no_msglog_check

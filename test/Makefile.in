@@ -1,0 +1,96 @@
+# This Makefile builds the support programs for the Exim test suite.
+
+##############################################################################
+# These variables are set by the configure script.
+
+CC=@CC@
+CFLAGS=@CFLAGS@ @CPPFLAGS@ @BIND_8_COMPAT@ @DEFS@
+LDFLAGS=@LDFLAGS@
+CLIENT_OPENSSL=@CLIENT_OPENSSL@
+CLIENT_GNUTLS=@CLIENT_GNUTLS@
+CLIENT_ANYTLS=@CLIENT_ANYTLS@
+LOADED=@LOADED@
+LOADED_OPT=@LOADED_OPT@
+LIBS=@LIBS@
+
+SRC = @srcdir@/src
+
+##############################################################################
+
+BINARIES =	bin/cf bin/client $(CLIENT_OPENSSL) $(CLIENT_GNUTLS) $(CLIENT_ANYTLS) \
+                bin/checkaccess bin/fakens bin/fd bin/iefbr14 $(LOADED) \
+                bin/mtpscript bin/server bin/showids bin/locate \
+
+# List of targets
+
+all:            binaries sysbinaries
+
+binaries:	$(BINARIES)
+
+sysbinaries:	FORCE binaries
+		bin/locate initdb postgres pg_ctl mysqld
+		ls -la bin.sys
+
+# Compile and link the programs:
+#
+# bin/cf              a "compare" program
+# bin/checkaccess     tests whether the exim uid/gid can access the files
+# bin/client          an SMTP script-driven client, without TLS support
+# bin/client-gnutls   ditto, with GnuTLS support
+# bin/client-ssl      ditto, with OpenSSL support
+# bin/fakens          a fake nameserver
+# bin/fd              output details of open file descriptors
+# bin/iefbr14         a program that does nothing and returns 0
+# bin/loaded          a dynamically loaded test module
+# bin/mtpscript       an LMTP/SMTP "server" that works on stdin/stdout
+# bin/server          an SMTP (socket) script-driven server (no TLS support)
+# bin/showids         output current uid, gid, euid, egid
+
+bin/cf:         $(SRC)/cf.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/cf $(SRC)/cf.c
+
+bin/client:     $(SRC)/client.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/client $(SRC)/client.c $(LIBS)
+
+bin/client-gnutls: $(SRC)/client.c Makefile
+		$(CC) $(CFLAGS) -DHAVE_GNUTLS $(LDFLAGS) -o bin/client-gnutls $(SRC)/client.c -lgnutls -lgcrypt $(LIBS)
+
+bin/client-ssl: $(SRC)/client.c Makefile
+		$(CC) $(CFLAGS) -DHAVE_OPENSSL $(LDFLAGS) -o bin/client-ssl $(SRC)/client.c -lssl -lcrypto $(LIBS)
+
+$(CLIENT_ANYTLS): $(CLIENT_GNUTLS) $(CLIENT_OPENSSL)
+		[ -n "$(CLIENT_GNUTLS)" ] && ln -sf `basename $(CLIENT_GNUTLS)` $@ || ln -sf `basename $(CLIENT_OPENSSL)` $@
+
+bin/checkaccess:$(SRC)/checkaccess.c Makefile
+		$(CC) $(CFLAGS) -DNO_TLS $(LDFLAGS) -o bin/checkaccess $(SRC)/checkaccess.c
+
+bin/fakens:     $(SRC)/fakens.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/fakens $(SRC)/fakens.c $(LIBS)
+
+bin/fd:         $(SRC)/fd.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/fd $(SRC)/fd.c
+
+bin/iefbr14:    $(SRC)/iefbr14.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/iefbr14 $(SRC)/iefbr14.c
+
+bin/loaded:     $(SRC)/loaded.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) $(LOADED_OPT) -o bin/loaded $(SRC)/loaded.c
+
+bin/mtpscript:  $(SRC)/mtpscript.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) $(mtpscript_OPT) -o bin/mtpscript $(SRC)/mtpscript.c
+
+bin/server:     $(SRC)/server.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/server $(SRC)/server.c $(LIBS)
+
+bin/showids:    $(SRC)/showids.c Makefile
+		$(CC) $(CFLAGS) $(LDFLAGS) -o bin/showids $(SRC)/showids.c
+
+bin/locate:     $(SRC)/locate.sh Makefile
+		cp $(SRC)/locate.pl bin/locate
+		chmod 0755 bin/locate
+
+clean:;         rm -rf $(BINARIES) bin.sys
+
+FORCE:
+
+# End

@@ -1,0 +1,130 @@
+# named queues
+# Exim test configuration 0576
+#
+no_msglog_check
+#
+exim -bs
+HELO test
+MAIL FROM:<CALLER@myhost.test.ex>
+RCPT TO: <normal@test.ex>
+DATA
+Subject: test
+
+foo
+.
+RSET
+MAIL FROM:<CALLER@myhost.test.ex>
+RCPT TO: <alternate@test.ex>
+DATA
+Subject: test
+
+foo
+.
+QUIT
+****
+#
+### default q
+exim -bp
+****
+### alternate q
+exim -bp -qGalternate
+****
+#
+exim -qq
+****
+#
+exim -qGnosuchqueue
+****
+#
+exim -qGalternate
+****
+#
+#
+#
+exim -DSERVER=server -qGlowpri/3s
+****
+sleep 1
+exim -bs
+HELO test
+MAIL FROM:<CALLER@myhost.test.ex>
+RCPT TO: <lowpri@test.ex>
+DATA
+Subject: test 
+
+foo
+.
+QUIT
+****
+sleep 3
+killdaemon
+#
+# third-party queue transfer
+exim -bs
+HELO test
+MAIL FROM:<CALLER@myhost.test.ex>
+RCPT TO: <alternate@test.ex>
+DATA
+Subject: test
+
+foo
+.
+QUIT
+****
+# 
+sudo mv DIR/spool/alternate/input/* DIR/spool/input/
+exim -q
+****
+#
+#
+# Native queue transfer
+### load messages
+exim -bs
+HELO test
+MAIL FROM:<CALLER@myhost.test.ex>
+RCPT TO: <normal@test.ex>
+DATA
+Subject: test
+
+foo
+.
+RSET
+MAIL FROM:<CALLER@myhost.test.ex>
+RCPT TO: <alternate@test.ex>
+DATA
+Subject: test
+
+foo
+.
+QUIT
+****
+### default q
+exim -bp
+****
+### alternate q
+exim -bp -qGalternate
+****
+#
+exim -MG third $msg1
+****
+exim -qGalternate -MG third $msg1
+****
+### third q
+exim -bp -qGthird
+****
+exim -qGthird -MG '' $msg1 $msg2
+****
+### default q
+exim -bp
+****
+### alternate q
+exim -bp -qGalternate
+****
+### third q
+exim -bp -qGthird
+****
+#
+# Immediate delivery, via alternate queue
+exim -odi q_set_by_nonsmtp_acl@test.ex
+****
+#
+no_stderr_check

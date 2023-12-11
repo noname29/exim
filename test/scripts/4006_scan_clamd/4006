@@ -1,0 +1,172 @@
+# content scan interface: clamav
+#
+# SCAN command interface, on a unix socket, only.  No ExtendedDetectionInfo.
+#
+# Pass
+server DIR/eximdir/clam_sock
+<SCAN
+>LF>scanned_file_name: OK
+*eof
+****
+#
+#
+#
+exim -odi -bs -DSRV=DIR/eximdir/clam_sock -DOPT=
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: message should be accepted
+
+.
+quit
+****
+#
+#
+#
+# fail/error
+server DIR/eximdir/clam_sock
+<SCAN
+>LF>scanned_file_name: 666 ERROR
+*eof
+****
+#
+#
+#
+exim -odi -bs -DSRV=DIR/eximdir/clam_sock -DOPT=
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: defer this one due to scanner error
+
+.
+quit
+****
+#
+#
+#
+# fail/virus-found
+server DIR/eximdir/clam_sock
+<SCAN
+>LF>scanned_file_name: VNAME FOUND
+*eof
+****
+#
+#
+#
+exim -odi -bs -DSRV=DIR/eximdir/clam_sock -DOPT=/defer_ok
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: message should be rejected
+
+.
+quit
+****
+#
+#
+#
+# times out
+server DIR/eximdir/clam_sock
+*sleep 3
+****
+#
+#
+#
+exim -odi -bs -DSRV=DIR/eximdir/clam_sock -DOPT="/ tmo=2s"
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: defer this one due to timeout
+
+.
+quit
+****
+#
+#
+#
+# times out
+server DIR/eximdir/clam_sock
+*sleep 3
+****
+#
+#
+#
+exim -odi -bs -DSRV=DIR/eximdir/clam_sock -DOPT="/ tmo=2s / defer_ok"
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: accept this one despite timeout
+
+.
+quit
+****
+#
+#
+#
+#
+# connect-fail (server not initially listenting), retry
+server -i 2 DIR/eximdir/clam_sock
+<SCAN
+>LF>scanned_file_name: OK
+*eof
+****
+#
+exim -odi -bs -DSRV=DIR/eximdir/clam_sock -DCONTROL="retry=4s"
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: message should be accepted after a retry
+
+.
+quit
+****
+#
+################################################################################
+#
+# TCP clamd server connection, default protocol
+#  only checks the protocol header, filesize element and start of eml file lines;
+#  not the post-file protocol mark
+# Pass
+server PORT_D
+<zINSTREAM\x00\x00\x00\x01\xe5From MAILER-DAEMON
+<X-Envelope-From: <
+<X-Envelope-To: userx@test.ex
+<Received: from
+<\x09by myhost.test.ex with local-esmtp
+<\x09(envelope-from <
+<\x09id
+<\x09for userx@test.ex;
+<\x09
+<Date:
+<Subject: message should be accepted
+<Message-Id: <
+<From:
+<
+<
+>LF>scanned_file_name: OK
+*eof
+****
+#
+exim -odi -bs -DSRV="127.0.0.1 PORT_D" -DOPT=
+ehlo test.ex
+mail from:<>
+rcpt to:<userx@test.ex>
+data
+Date: Fri, 17 Dec 2004 14:35:01 +0100
+Subject: message should be accepted
+
+.
+quit
+****

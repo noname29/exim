@@ -1,0 +1,70 @@
+# Exim test configuration 0610
+
+SERVER =
+
+.include DIR/aux-var/std_conf_prefix
+
+rfc1413_query_timeout = 0s
+log_selector = +sender_on_delivery
+
+# ----- Main settings -----
+
+acl_smtp_connect = conn_chk
+acl_smtp_rcpt = accept
+
+untrusted_set_sender = *
+queue_only
+queue_run_in_order
+
+# ----- ACL -----
+
+begin acl
+
+conn_chk:
+.ifdef DELAY
+  defer	condition = ${if eq {SERVER}{server}}
+.endif
+  accept
+
+# ----- Routers -----
+
+begin routers
+
+r1:
+  driver = accept
+  condition = ${if eq {t1}{$sender_address_local_part}}
+  transport = t1
+
+r2:
+  driver = accept
+  condition = ${if eq {t2}{$sender_address_local_part}}
+  transport = t2
+
+# ----- Transports -----
+
+begin transports
+
+t1:
+  driver = smtp
+  allow_localhost
+  hosts = 127.0.0.1
+  port = PORT_D
+  interface = 127.0.0.1
+  hosts_try_fastopen =	:
+
+t2:
+  driver = smtp
+  allow_localhost
+  hosts = 127.0.0.1
+  port = PORT_D
+  interface = HOSTIPV4
+  hosts_try_fastopen =	:
+
+# ----- Retry -----
+
+begin retry
+
+* * F,5d,1s
+
+# End
+

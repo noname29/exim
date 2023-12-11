@@ -1,0 +1,280 @@
+# callout lazy-close, smtp send
+need_ipv4
+#
+# a recipient verify and continued-delivery
+# smtp send
+server PORT_S
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO
+250 OK
+DATA
+354 hit me
+.
+250 yeah got that message
+QUIT
+221 Bye
+****
+#
+exim -DSERVER=server -bd -oX PORT_D
+****
+#
+client 127.0.0.1 PORT_D
+??? 220
+EHLO test.ex
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250 
+MAIL FROM:<userc@ok.example>
+??? 250
+RCPT TO:<userd@test.ex>
+??? 250
+DATA
+??? 354
+Subject: test
+
+body
+.
+??? 250
+QUIT
+??? 221
+****
+sleep 1
+killdaemon
+#
+exim -z 'test2'
+****
+#
+# smtp send, deliver_drop_priv
+server PORT_S
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO
+250 OK
+DATA
+354 hit me
+.
+250 yeah got that message
+QUIT
+221 Bye
+****
+#
+exim -DSERVER=server -DOPT=deliver_drop_privilege -bd -oX PORT_D
+****
+#
+client 127.0.0.1 PORT_D
+??? 220
+EHLO test.ex
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250 
+MAIL FROM:<usere@ok.example>
+??? 250
+RCPT TO:<userf@test.ex>
+??? 250
+DATA
+??? 354
+Subject: test
+
+body
+.
+??? 250
+QUIT
+??? 221
+****
+sleep 1
+killdaemon
+#
+#
+exim -z 'test3'
+****
+# multiple recipients
+# 1st callout result is cached (above); should not activate LCC
+# smtp send
+server PORT_S 2
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO:<userd2@test.ex>
+250 OK
+QUIT
+221 Bye
+*eof
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO:<userd@test.ex>
+250 OK
+RCPT TO:<userd2@test.ex>
+250 OK
+DATA
+354 hit me
+.
+250 yeah got that message
+QUIT
+221 Bye
+****
+#
+exim -d+all -DSERVER=server -bd -oX PORT_D
+****
+#
+client 127.0.0.1 PORT_D
+??? 220
+EHLO test.ex
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250 
+MAIL FROM:<userc@ok.example>
+??? 250
+RCPT TO:<userd@test.ex>
+??? 250
+RCPT TO:<userd2@test.ex>
+??? 250
+DATA
+??? 354
+Subject: test
+
+body
+.
+??? 250
+QUIT
+??? 221
+****
+sleep 1
+#
+#
+exim -z 'test4'
+****
+# 2nd callout result is cached (above); should not activate LCC
+# smtp send
+server PORT_S 2
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO:<userd3@test.ex>
+250 OK
+QUIT
+221 Bye
+*eof
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO:<userd3@test.ex>
+250 OK
+RCPT TO:<userd2@test.ex>
+250 OK
+DATA
+354 hit me
+.
+250 yeah got that message
+QUIT
+221 Bye
+****
+#
+# XXX this test intermittently fails, at this client...
+# the client gets a 451 rcpt-v fail for userd3
+# the stderr-server says it got a conn-refused for the verify callout, which should have
+#  gone to the above "server" command, first of the 2 conns it is expecting
+# the stdout-server shows "server" handling the previous subtest (userd, userd2) fine, plus
+#  a fresh "server" startup and listen.  Which should have been this one... perhaps it was
+#  not there in time?  Add server-wait synch point for _previous_ server, using dummy "exim -z".
+client 127.0.0.1 PORT_D
+??? 220
+EHLO test.ex
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250 
+MAIL FROM:<userc@ok.example>
+??? 250
+RCPT TO:<userd3@test.ex>
+??? 250
+RCPT TO:<userd2@test.ex>
+??? 250
+DATA
+??? 354
+Subject: test
+
+body
+.
+??? 250
+QUIT
+??? 221
+****
+sleep 1
+#
+#
+exim -z 'test5'
+****
+# no cache hits; should do LCC
+# smtp send
+server PORT_S 2
+220 Welcome
+EHLO
+250 Hi
+MAIL FROM
+250 OK
+RCPT TO:<userd4@test.ex>
+250 OK
+RCPT TO:<userd5@test.ex>
+250 OK
+DATA
+354 hit me
+.
+250 yeah got that message
+QUIT
+221 Bye
+****
+#
+client 127.0.0.1 PORT_D
+??? 220
+EHLO test.ex
+??? 250-
+??? 250-
+??? 250-
+??? 250-
+??? 250 
+MAIL FROM:<userc@ok.example>
+??? 250
+RCPT TO:<userd4@test.ex>
+??? 250
+RCPT TO:<userd5@test.ex>
+??? 250
+DATA
+??? 354
+Subject: test
+
+body
+.
+??? 250
+QUIT
+??? 221
+****
+sleep 1
+killdaemon
+#
+#
+no_stdout_check
+no_stderr_check
+no_msglog_check

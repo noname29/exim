@@ -1,0 +1,21 @@
+# $local_part_data, multi-rcpt message
+#
+exim -bs -odi
+helo test
+mail from:<someone@some.domain>
+rcpt to:<CALLER@HOSTNAME>
+rcpt to:<b@remote>
+data
+.
+quit
+****
+exim -bs -odi
+helo test
+mail from:<someone@some.domain>
+rcpt to:<a@remote>
+rcpt to:<CALLER@HOSTNAME>
+data
+.
+quit
+****
+no_message_check

@@ -1,0 +1,17 @@
+# control = suppress_local_fixups
+exim -odi -bs
+helo test
+mail from:<>
+rcpt to:<userx@dom.com>
+data
+.
+quit
+****
+exim -odi -bs
+helo test
+mail from:<>
+rcpt to:<usery@dom.com>
+data
+.
+quit
+****

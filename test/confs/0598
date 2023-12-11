@@ -1,0 +1,23 @@
+# Exim test configuration 0598
+
+.include DIR/aux-var/std_conf_prefix
+
+
+# ----- Main settings -----
+
+domainlist local_domains = test.ex
+qualify_domain = test.ex
+queue_only
+notifier_socket = DIR/spool/this_my_notify_socket
+
+log_selector = +millisec
+
+acl_not_smtp = on_rcpt
+
+begin acl
+
+on_rcpt:
+  accept logwrite = queue_size: $queue_size
+
+
+# End

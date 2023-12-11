@@ -1,0 +1,97 @@
+# TCP Fast Open
+#
+# Linux:
+# Both server and client-side TFO support must be enabled in the
+# kernel, 'sudo sh -c "echo 3 > /proc/sys/net/ipv4/tcp_fastopen"'.
+#
+# A packet capture on the loopback interface will show the TFO
+# option on the SYN, but the fast-output SMTP banner will not
+# be seen unless you also deliberately emulate a long path:
+# 'sudo tc qdisc add dev lo root netem delay 50ms'
+# You'll need iproute-tc installed, for the tc command.
+# You'll need kernel-modules-extra installed, or you get
+# an unhelpful error from RTNETLINK.
+# To tidy up:  'sudo tc qdisc delete dev lo root'
+#
+# MacOS:
+# The kernel seems to have TFO enabled both ways as default.
+# There is a net.inet.tcp.clear_tfocache parameter
+## sysctl -w foo-val
+#
+# For network delays there is something called 'Network Link Conditioner'
+# which might do the job.  But how to manipulate it?
+#
+#
+# FreeBSD: it looks like you have to compile a custom kernel, with
+# 'options TCP_RFC7413' in the config.  Also set
+# 'net.inet.tcp.fastopen.server_enable=1' in /etc/sysctl.conf
+# Seems to always claim TFO used by transport, if tried.
+#
+# FreeBSD: tried this setup, but we only get the banner captured 100ms after 3rd-ack:
+# #kenv net.inet.ip.fw.default_to_accept=1
+# #kldload ipfw dummynet
+# #ipfw add 00097 pipe 1 ip from 127.0.0.1 to 127.0.0.1
+# #ipfw pipe 1 config delay 50ms
+# Also, the VM managed to lose the ipv4 & 6 addrs on its main interface
+# after a while - so not usable in production
+#
+sudo perl
+system ("tc qdisc add dev lo root netem delay 50ms");
+****
+#
+#
+# Disable the TFO blackhole detection, as we seem to be running foul of it.
+# If bitten, we see the expected EINPROGRESS for sendto, yet no TFO cookie
+# option on the SYN.
+#
+sudo perl
+system ("[ -e /proc/sys/net/ipv4/tcp_fastopen_blackhole_timeout_sec ] && echo 0 > /proc/sys/net/ipv4/tcp_fastopen_blackhole_timeout_sec");
+****
+#
+# First time runs will see a TFO request option only; subsequent
+# ones should see the TFO cookie and fast-output SMTP banner
+# (currently on a separate packet after the server SYN,ACK but before
+# the client ACK).
+#
+# The client log => line  should have a "TFO" element.
+# The server log <= line for a@test.ex  should not.
+#
+# First clear any previously-obtained cookie:
+sudo perl
+open(INFO, "-|", "/usr/bin/uname -s");
+$_ = <INFO>;
+if (/^FreeBSD/) {
+system("sysctl net.inet.tcp.fastopen.client_enable=0"); system("sysctl net.inet.tcp.fastopen.client_enable=1");
+} else {
+system ("ip tcp_metrics delete 127.0.0.1");
+}
+
+****
+#
+#
+#
+exim -DSERVER=server -bd -oX PORT_D
+****
+#
+exim a@test.ex
+Testing
+****
+sleep 3
+#
+# The server log <= line for b@test.ex  should have a "TFO" element, but
+# this will only be obtained when the above delay is inserted into the
+# loopback net path.
+#
+exim b@test.ex
+Testing
+****
+sleep 3
+#
+#
+sudo perl
+system ("tc qdisc delete dev lo root");
+system ("[ -e /proc/sys/net/ipv4/tcp_fastopen_blackhole_timeout_sec ] && echo 3600 > /proc/sys/net/ipv4/tcp_fastopen_blackhole_timeout_sec");
+****
+#
+killdaemon
+no_msglog_check

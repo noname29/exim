@@ -1,0 +1,19 @@
+# Exim test configuration 0471
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+log_selector = +received_recipients
+
+# ----- Main settings -----
+
+
+
+# ----- Rewrite -----
+
+begin rewrite
+
+^.{40,}@*	deny_me@test.example								FTbcfrt
+*@*		$1@${lookup{${lc:$2}}partial-lsearch{DIR/aux-fixed/TESTNUM.rw}{$value}fail}	FTbcfrt
+
+# End

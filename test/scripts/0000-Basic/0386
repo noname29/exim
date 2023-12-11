@@ -1,0 +1,27 @@
+# ACLs and multiple messages
+exim -d -bh V4NET.9.8.7
+helo test
+mail from:<x@y>
+rcpt to:<1@b>
+rset
+mail from:<x@y>
+rcpt to:<1@b>
+quit
+****
+exim -d -odi -bs -oMa V4NET.11.12.13 userx
+helo test
+mail from:<x@y>
+rcpt to:<2@b>
+data
+
+Message 1
+.
+rset
+mail from:<x@y>
+rcpt to:<2@b>
+data
+
+Message 2
+.
+quit
+****

@@ -1,0 +1,20 @@
+>>> host in hosts_connection_nolog? no (option unset)
+>>> host in host_lookup? no (option unset)
+>>> host in host_reject_connection? no (option unset)
+>>> host in sender_unqualified_hosts? no (option unset)
+>>> host in recipient_unqualified_hosts? no (option unset)
+>>> host in helo_verify_hosts? no (option unset)
+>>> host in helo_try_verify_hosts? no (option unset)
+>>> host in helo_accept_junk_hosts? no (option unset)
+>>> test in helo_lookup_domains? no (end of list)
+>>> using ACL "check_rcpt"
+>>> processing "deny" (TESTSUITE/test-config 16)
+>>> check dnslists = +defer_unknown : test.again.dns
+>>> dnslists check: +defer_unknown
+>>> dnslists check: test.again.dns
+>>> new DNS lookup for 1.0.0.V4NET.test.again.dns
+>>> 1.0.0.V4NET.test.again.dns in dns_again_means_nonexist? no (option unset)
+>>> dnslists: wrote cache entry, ttl=3600
+LOG: DNS list lookup defer (probably timeout) for 1.0.0.V4NET.test.again.dns: returned DEFER
+>>> deny: condition test deferred in ACL "check_rcpt"
+LOG: H=(test) [V4NET.0.0.1] F=<userx@x> temporarily rejected RCPT <userx@y>

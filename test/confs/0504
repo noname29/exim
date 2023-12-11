@@ -1,0 +1,50 @@
+# Exim test configuration 0504
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+
+# ----- Main settings -----
+
+
+# ----- Routers -----
+
+begin routers
+
+r1:
+  driver = accept
+  transport = OPT
+
+
+# ----- Transports -----
+
+begin transports
+
+t1:
+  driver = appendfile
+  file = DIR/test-mail/$local_part
+  create_file = DIR/test-mail
+  user = CALLER
+  transport_filter = /non/existent/file
+
+t2:
+  driver = pipe
+  command = /bin/sh -c '/bin/cat > /dev/null'
+  transport_filter = /non/existent/file
+
+t3:
+  driver = smtp
+  hosts = 127.0.0.1
+  port = PORT_S
+  hosts_try_fastopen =	:
+  allow_localhost
+  transport_filter = /non/existent/file
+
+
+# ----- Retry -----
+
+begin retry
+
+* *  F,1d,1d
+
+# End

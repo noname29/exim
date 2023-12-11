@@ -1,0 +1,11 @@
+# Exim test configuration 2500
+
+.include DIR/aux-var/std_conf_prefix
+
+primary_hostname = myhost.test.ex
+
+# ----- Main settings -----
+
+acl_not_smtp = 		accept set acl_m0 =	${lookup {key} dsearch {DIR/$recipients}}
+
+# End

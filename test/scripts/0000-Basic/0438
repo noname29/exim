@@ -1,0 +1,26 @@
+# -oP to override pid file
+need_ipv4
+#
+exim -d -DSERVER=server -bd -oX PORT_D
+****
+millisleep 1000
+killdaemon
+# PID file must be DIR/spool/exim-daemon.* in order for "killdaemon" to work
+exim -d -DSERVER=server -bd -oX PORT_D -oP DIR/spool/exim-daemon.anotherpid
+****
+millisleep 1000
+killdaemon
+#
+# Check for a SIGTERM daemon kill removing the pid file
+exim -d -DSERVER=server -bd -oX PORT_D -oP DIR/spool/mypidfile
+****
+sleep 1
+sudo perl
+system "ls DIR/spool | grep pid";
+print "\n";
+open(IN, "<", "DIR/spool/mypidfile");
+while (<IN>) { kill "TERM", $_; }
+****
+sleep 1
+ls DIR/spool
+#

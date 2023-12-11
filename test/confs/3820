@@ -1,0 +1,120 @@
+# Exim test configuration 3820
+
+SERVER=
+
+.ifdef TRUSTED
+.include DIR/aux-var/tls_conf_prefix
+.else
+.include DIR/aux-var/std_conf_prefix
+.endif
+
+primary_hostname = myhost.test.ex
+tls_certificate = ${if eq {SERVER}{server}{DIR/aux-fixed/cert1}fail}
+
+# ----- Main settings -----
+
+acl_smtp_rcpt = accept
+queue_only
+
+
+begin routers
+
+client_r:
+  driver =	accept
+  condition =	${if !eq {SERVER}{server}}
+  transport =	smtp
+  errors_to =
+
+begin transports
+
+smtp:
+  driver =		smtp
+  hosts =		127.0.0.1
+  allow_localhost
+  port =		PORT_D
+.ifdef TRUSTED
+  hosts_require_tls =	*
+  tls_verify_certificates = DIR/aux-fixed/cert1
+  tls_verify_cert_hostnames = :
+.else
+  hosts_avoid_tls =	*
+.endif
+  hosts_require_auth =	*
+
+# ----- Authentication -----
+
+begin authenticators
+
+.ifndef TRUSTED
+sasl1:
+  driver =		gsasl
+  public_name =		ANONYMOUS
+  server_set_id =	$auth1
+  server_condition =	true
+
+sasl2:
+  driver =		gsasl
+  public_name =		PLAIN
+  server_set_id =	$auth1
+  server_condition =	${if eq {$auth3}{pencil}}
+
+  client_condition =	${if eq {plain}{$local_part}}
+  client_username =	ph10
+  client_password =	pencil
+.endif
+
+sasl3:
+  driver =		gsasl
+.ifdef TRUSTED
+  public_name =		SCRAM-SHA-1-PLUS
+  server_advertise_condition =	${if def:tls_in_cipher}
+  server_channelbinding =	true
+.else
+  public_name =		SCRAM-SHA-1
+.endif
+
+  server_scram_salt =	${if eq {$auth1}{ph10} {QSXCR+Q6sek8bf92}}
+.ifdef _HAVE_AUTH_GSASL_SCRAM_S_KEY
+  server_key =		D+CSWLOshSulAsxiupA+qs2/fTE=
+  server_skey =		6dlGYMOdZcOPutkcNY8U2g7vK9Y=
+.endif
+  server_password =	${if eq {$auth1}{ph10} {pencil}{unset_password}}
+  server_condition =	true
+  server_set_id =	$auth1
+
+  client_condition =	${if eq {scram_sha_1}{$local_part}}
+  client_username =	ph10
+  client_password =	pencil
+.ifdef _HAVE_AUTH_GSASL_SCRAM_S_KEY
+  client_spassword =	1d96ee3a529b5a5f9e47c01f229a2cb8a6e15f7d
+.endif
+.ifdef TRUSTED
+  client_channelbinding = true
+.endif
+
+.ifdef _HAVE_AUTH_GSASL_SCRAM_SHA_256
+sasl4:
+  driver =		gsasl
+.ifdef TRUSTED
+  public_name =		SCRAM-SHA-256-PLUS
+  server_advertise_condition =	${if def:tls_in_cipher}
+  server_channelbinding =	true
+.else
+  public_name =		SCRAM-SHA-256
+.endif
+
+  server_scram_salt =	QSXCR+Q6sek8bf92
+  server_password =	pencil
+  server_condition =	true
+  server_set_id =	$auth1
+
+  client_condition =	${if eq {scram_sha_256}{$local_part}}
+  client_username =	ph10
+  client_password =	pencil
+.ifdef TRUSTED
+  client_channelbinding = true
+.endif
+.endif
+
+
+# End

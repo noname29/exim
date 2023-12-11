@@ -1,0 +1,20 @@
+# TLS server & client: no certificate in client
+gnutls
+munge gnutls_handshake
+exim -DSERVER=server -bd -oX PORT_D
+****
+# will send to 127.0.0.1 and the server requests a client-cert
+exim userx@test.ex
+Test message
+****
+# will send to HOSTIPV4 and the server requests&requires
+exim usery@test.ex
+Test message
+****
+exim -qf
+****
+killdaemon
+#
+millisleep 500
+exim -DSERVER=server -DNOTDAEMON -qf
+****

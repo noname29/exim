@@ -1,0 +1,34 @@
+
+******** SERVER ********
+>>> host in hosts_connection_nolog? no (option unset)
+>>> host in host_lookup? no (option unset)
+>>> host in host_reject_connection? no (option unset)
+>>> host in sender_unqualified_hosts? no (option unset)
+>>> host in recipient_unqualified_hosts? no (option unset)
+>>> host in helo_verify_hosts? no (option unset)
+>>> host in helo_try_verify_hosts? no (option unset)
+>>> host in helo_accept_junk_hosts? no (option unset)
+>>> xxx in helo_lookup_domains? no (end of list)
+>>> processing "accept" (TESTSUITE/test-config 47)
+>>> accept: condition test succeeded in inline ACL
+>>> end of inline ACL: ACCEPT
+>>> host in ignore_fromline_hosts? no (option unset)
+>>> using ACL "check_dkim"
+>>> processing "warn" (TESTSUITE/test-config 38)
+>>> check logwrite = signer: $dkim_cur_signer bits: $dkim_key_length
+>>>                = signer: test.ex bits: 1024
+LOG: 10HmaX-0005vi-00 signer: test.ex bits: 1024
+>>> warn: condition test succeeded in ACL "check_dkim"
+>>> processing "accept" (TESTSUITE/test-config 41)
+>>> accept: condition test succeeded in ACL "check_dkim"
+>>> end of ACL "check_dkim": ACCEPT
+LOG: 10HmaX-0005vi-00 DKIM: d=test.ex s=sel c=simple/simple a=rsa-sha1 b=1024 [verification succeeded]
+>>> using ACL "check_data"
+>>> processing "accept" (TESTSUITE/test-config 45)
+>>> check logwrite = ${authresults {$primary_hostname}}
+>>>                = Authentication-Results: myhost.test.ex;
+>>> 	dkim=pass header.d=test.ex header.s=sel header.a=rsa-sha1
+LOG: 10HmaX-0005vi-00 Authentication-Results: myhost.test.ex;\n	dkim=pass header.d=test.ex header.s=sel header.a=rsa-sha1
+>>> accept: condition test succeeded in ACL "check_data"
+>>> end of ACL "check_data": ACCEPT
+LOG: 10HmaX-0005vi-00 <= CALLER@bloggs.com H=(xxx) [127.0.0.1] P=smtp S=sss DKIM=test.ex id=qwerty1234@disco-zombie.net

@@ -1,0 +1,30 @@
+# interface selection (v4 vs v6) in outgoing SMTP
+need_ipv4
+need_ipv6
+#
+exim -DSERVER=server -bd -oX PORT_D
+****
+exim user4@h1.test.ex
+
+1
+interface: <; ::1 ; HOSTIPV4
+****
+exim user6@h3.test.ex
+
+3
+interface: <; ${if eq{0}{1}{HOSTIPV6}fail}
+****
+exim user6@h4.test.ex
+
+4
+interface: <; ${if eq{0}{1}{HOSTIPV6}{  }}
+****
+exim user6@h5.test.ex
+
+5
+interface: <; ${if 
+****
+exim -qf
+****
+killdaemon
+no_msglog_check

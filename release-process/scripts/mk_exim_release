@@ -1,0 +1,815 @@
+#!/usr/bin/env perl
+# Copyright (c) The Exim Maintainers 2016 - 2021
+
+use strict;
+use warnings;
+use Carp;
+use Cwd qw'abs_path';
+use File::Basename;
+use File::Path qw(make_path remove_tree);
+use File::Temp;
+use Getopt::Long;
+use IO::File;
+use Pod::Usage;
+use Digest::SHA;
+use feature 'state';
+use if $ENV{DEBUG} => 'Smart::Comments';
+
+my $ME = basename $0;
+
+
+my $debug   = undef;
+my $verbose = 0;
+
+# MAJOR.MINOR[.SECURITY[.FIXES]][-RCX]
+# 4    .90    .0        .22      -RC1
+my $version_pattern = qr/
+    (?<release>
+    (?<target_release>
+           (?<major>\d)         # 4
+         \.(?<minor>\d\d)       #  .90
+      (?:\.(?<security>\d+)     #     .0
+      (?:\.(?<fixes>)\d+)?)?    #       .22
+    )                           # target-release ->|
+       (?:-(?<rc>RC\d+)?)?      #          -RC1
+    )
+/x;
+
+my $quick_version_pattern = qr/
+   (?<release>
+   (?<last_tag>
+           (?<major>\d)         # 4
+         \.(?<minor>\d\d)       #  .90
+      (?:\.(?<security>\d+)     #     .0
+      (?:\.(?<fixes>)\d+)?)?    #       .22
+   )                            # last-tag ->|
+       (?:-(?<quick>\d+-g[[:xdigit:]]+))?     #  -3-gdeadbef
+    )
+/x;
+
+# ------------------------------------------------------------------
+
+package Context {
+    use strict;     # not strictly necessary yet, until in an own package
+    use warnings;   # not strictly necessary yet, ...
+    use File::Spec::Functions qw'splitpath catfile catdir splitdir';
+    use File::Path qw'make_path remove_tree';
+    use File::Copy;
+    use Cwd qw'abs_path';
+    use Carp;
+
+    package PWD {
+        use Cwd;
+        sub TIESCALAR { bless do {\my $x} }
+        sub FETCH { cwd }
+    }
+
+    tie my $cwd => 'PWD' or die;    # this returns the current dir now, dynamically
+
+    sub new {
+        my $class = shift;
+        return bless { @_ } => $class;
+    }
+
+    sub check_version {
+        my $context = shift;
+        my $version = shift // 'HEAD';
+
+        #
+        # v => {
+        #   release =>                   4.92-RC4 |    4.92-27-gabcdef
+        #   target_release|last_tag =>   4.92     |    4.92
+        #
+        #   major    =>  4
+        #   minor    =>  92
+        #   security =>
+        #   fixes    =>
+        #
+        #   rc|quick =>   RC4 | 27-gabcdef
+        #   }
+
+        #
+        # v => {
+        #   release =>                   4.92-RC4 |    4.92-27-gabcdef-dirty
+        #   target_release|last_tag =>   4.92     |    4.92
+        #
+        #   major    =>  4
+        #   minor    =>  92
+        #   security =>
+        #   fixes    =>
+        #
+        #   rc|quick =>   RC4 | 27-gabcdef-dirty
+        #   }
+
+        if ($context->{quick}) {
+            # Try to find suitable version description
+            chomp(my $describe = do {   # we wrap it into a open() to avoid hassle with
+                open(my $fh, '-|',      # strange version descriptions
+                    'git', describe => $version) or die;
+                <$fh>
+                } // exit 1);
+            $describe =~ /$quick_version_pattern/;
+
+            %{$context->{v}} = %+;
+            ($context->{commit}) = $version // ($context->{v}{quick} =~ /g([[:xdigit:]]+)/);
+        }
+        else {
+            croak "The given version number does not look right - $version"
+                if not $version =~ /$version_pattern/;
+            %{$context->{v}} = %+;
+
+            # find a valid vcs tag matching the version
+            my $pattern = "$context->{pkgname}-$context->{v}{release}" =~ s/[-_.]/[-_.]/gr;
+            chomp(my @tags = qx{git tag --list '$pattern'});
+
+            croak "The given version is ambigous, tags: @tags\n" if @tags > 1;
+            croak "The given version does not exist (no such tag: exim-$version)\n" if @tags == 0;
+
+            $context->{commit} = $tags[0];
+            # target_release: the release we aim to reach with release candidates
+            # FIXME: re-construct from the parsed version number
+        }
+
+        die "$ME: This script doesn't work for versions prior 4.92-RCx. "
+           ."Please checkout an older version.\n"
+            if $context->{v}{major} < 4
+            or $context->{v}{major} == 4 && $context->{v}{minor} < 92;
+
+        ### v: $context->{v}
+
+    }
+
+
+    # We prefer gtar to tar if gtar exists in $PATH
+    sub override_tar_cmd {
+        my $context = shift;
+        my $tar = $context->{tar_cmd};
+
+        return unless $tar eq 'tar';
+
+        foreach my $d (File::Spec->path()) {
+            my $p = catfile($d, 'gtar');
+            if (-x $p) {
+                $context->{tar_cmd} = $p;
+                print "Switched tar command to: $p\n" if $verbose;
+                return;
+            }
+        }
+    }
+
+    sub prepare_working_directory {
+        my $context = shift;
+        my $workspace = $context->{workspace};
+
+        if (not defined $workspace) {
+            $workspace = $context->{workspace} = File::Temp->newdir(
+                TEMPLATE => File::Spec->tmpdir . '/exim-packaging-XXXX',
+                CLEANUP  => $context->{cleanup});
+        }
+        else {
+            # ensure the working directory is not in place
+            if (-e $workspace) {
+                if ($context->{delete}) {
+                    print "Deleting existing $workspace\n" if $verbose;
+                    remove_tree $workspace, { verbose => $verbose || $debug };
+                }
+                else {
+                    croak "Working directory $workspace exists" if -e $workspace;
+                }
+            }
+
+            # create base directory
+            make_path( $context->{directory}, { verbose => $verbose || $debug } );
+        }
+
+        # Set(!) and create subdirectories
+        foreach (qw(vcs_export pkg_tars pkg_trees tmp)) {   # {dookbook}
+            make_path(
+                $context->{d}{$_} = catdir($workspace, $_),
+                { verbose => $verbose || $debug });
+        }
+    }
+
+    sub export_git_tree {
+        my $context = shift;
+
+        # build git command
+        my $archive_file = $context->{tmp_archive_file} = sprintf'%s/%s-%s.tar', $context->{d}{tmp}, $context->{pkgname}, $context->{v}{release};
+        ### $archive_file
+        my @cmd = ( 'git', 'archive', '--format=tar', "--output=$archive_file", $context->{commit} );
+        ### @cmd
+        # run git command
+        print "[$cwd] Running: @cmd\n" if $verbose;
+        0 == system @cmd or croak "Export failed";
+    }
+
+    sub unpack_tree {
+        # TODO: Why can't we combine the export_git_tree with the
+        # unpack_tree function?
+        my $context = shift;
+
+        ### $context
+        die "Cannot see archive file\n" unless -f $context->{tmp_archive_file};
+        my @cmd = ('tar',
+            xf => $context->{tmp_archive_file},
+            -C => $context->{d}{vcs_export} );
+
+        # run  command
+        print "[$cwd] Running: @cmd\n" if $verbose;
+        system @cmd and croak "Unpack failed\n";
+
+    }
+
+    sub make_version_script {
+        my $context = shift;
+
+        #my $variant = substr( $context->{v}{release}, length($context->{v}{target_release}) );
+        #if ( $context->{v}{release} ne $context->{v}{target_release} . $variant ) {
+        #    die "Broken version numbering, I'm buggy";
+        #}
+
+
+        # Work
+        if (not my $pid = fork // die "$ME: Cannot fork: $!\n") {
+
+            my $source_tree    = catdir($context->{d}{vcs_export}, 'src', 'src');
+            ### $source_tree
+
+            chdir $source_tree or die "chdir $source_tree: $!\n";
+
+            croak "WARNING: version.sh already exists - leaving it in place\n"
+                if -f 'version.sh';
+
+            # Currently (25. Feb. 2016) the mk_exim_release.pl up to now can't
+            # deal with security releases.!? So we need a current
+            # mk_exim_release.pl. But if we use a current (master), the
+            # reversion script returns wrong version info (it's running inside
+            # the Git tree and uses git --describe, which always returns the
+            # current version of master.) I do not want to change the old
+            # reversion scripts (in 4.86.1, 4.85.1).
+            #
+            # Thus we've to provide the version.sh, based on the info we have
+            # about the release. If reversion finds this, it doesn't try to find
+            # it's own way to get a valid version number from the git.
+            #
+            # 4.89 series: the logic here did not handle _RC<N> thus breaking RC
+            # status in versions.  nb: rc in context should be same as $variant
+            # in local context.
+
+            #my $stamp = $context->{minor} ? '_'.$context->{minor} : '';
+            #$stamp .= $context->{rc} if $context->{rc};
+            my $release = $context->{quick} ? $context->{v}{last_tag}
+                                            : $context->{v}{target_release};
+
+            my $variant =
+                  $context->{v}{rc} ? $context->{v}{rc}
+                : $context->{v}{quick} ? $context->{v}{quick}
+                : '';
+
+            print "[$cwd] create version.sh\n" if $verbose;
+            open(my $v, '>', 'version.sh') or die "Can't open version.sh for writing: $!\n";
+            print {$v} <<__;
+# initial version automatically generated by $0
+EXIM_RELEASE_VERSION=$release
+EXIM_VARIANT_VERSION=$variant
+EXIM_COMPILE_NUMBER=0
+# echo "[[[ \$EXIM_RELEASE_VERSION | \$EXIM_VARIANT_VERSION | \$EXIM_COMPILE_NUMBER ]]]"
+__
+            close $v  or die "$0: Can not close $source_tree/version.h: $!\n";
+            unlink 'version.h' or die "$ME: Can not unlink $source_tree/version.h: $!\n"
+                if -f 'version.h';
+
+            # Later, if we get the reversion script fixed, we can call it again.
+            # For now (25. Feb. 2016) we'll leave it unused.
+            #my @cmd = ('../scripts/reversion', 'release', $context->{commit});
+
+            my @cmd = ('../scripts/reversion', 'release');
+            print "[$cwd] Running: @cmd\n" if $verbose;
+            system(@cmd) and croak "reversion failed";
+
+            die "$ME: failed to create version.sh"
+                unless -f 'version.sh';
+
+            exit 0;
+        }
+        else {
+            $pid == waitpid($pid, 0) or die "$0: waidpid: $!\n";
+            exit $? >> 8 if $?;
+        }
+    }
+
+    sub build_documentation {
+        my $context = shift;
+        my $docdir = catdir $context->{d}{vcs_export}, 'doc', 'doc-docbook';
+
+        # documentation building does a chdir, so we'll do it in a
+        # subprocess
+        if (not my $pid = fork // die "$ME: Can't fork: $!\n") {
+            chdir $docdir or die "$ME: Can't chdir to $docdir: $!\n";
+            system('./OS-Fixups') == 0 or exit $?;
+            exec $context->{make_cmd},
+                "EXIM_VER=$context->{v}{release}", 'everything'
+                or die "$ME: [$cwd] Cannot exec $context->{make_cmd}: $!\n";
+        }
+        else {
+            waitpid($pid, 0);
+            exit $? >> 8 if $?;
+        }
+
+        $context->copy_docbook_files;
+    }
+
+    sub copy_docbook_files {
+        my $context = shift;
+
+        # where the generated docbook files can be found
+        my $docdir = catdir $context->{d}{vcs_export}, 'doc', 'doc-docbook';
+
+        foreach ('spec.xml', 'filter.xml') {
+            my $from = catfile $docdir, $_;
+            my $to = catdir $context->{d}{tmp}; # {dookbook}
+            copy $from => $to    or die $@;
+        }
+    }
+
+    sub build_html_documentation {
+        my $context = shift;
+
+        # where the website docbook source dir is - push the generated
+        # files there
+        {
+            my $webdir = catdir $context->{website_base}, 'docbook', $context->{v}{target_release};
+            make_path $webdir, { verbose => $verbose || $debug };
+            copy catfile($context->{d}{vcs_export}, 'doc', 'doc-docbook', $_)
+                => $webdir or die $@
+                for 'spec.xml', 'filter.xml';
+        }
+
+        my $gen    = catfile $context->{website_base}, 'script/gen';
+        my $outdir = catdir $context->{d}{pkg_trees}, "exim-html-$context->{v}{release}";
+
+        make_path $outdir, { verbose => $verbose || $debug };
+
+        my @cmd = (
+            $gen,
+            '--spec'    => catfile($context->{d}{tmp}, 'spec.xml'),     # {dookbook}
+            '--filter'  => catfile($context->{d}{tmp}, 'filter.xml'),   # {dookbok}
+            '--latest'  => $context->{v}{target_release},
+            '--docroot' => $outdir,
+            '--localstatic',
+            ($verbose || $debug ? '--verbose' : ()),
+        );
+
+        print "[$cwd] Executing @cmd\n";
+        0 == system @cmd or exit $? >> 8;
+
+    }
+
+    sub sign {
+        my $context = shift;
+        foreach my $tar (glob "$context->{d}{pkg_tars}/*") {
+            system gpg =>
+            '--quiet', '--batch',
+            defined $context->{gpg}{key}
+                ? ('--local-user' => $context->{gpg}{key})
+                : (),
+            '--detach-sig', '--armor', $tar;
+        }
+    }
+
+    sub move_to_outdir {
+        my $context = shift;
+        make_path $context->{OUTDIR}, { verbose => $verbose || $debug };
+        move $_ => $context->{OUTDIR} or die $@
+            for glob "$context->{d}{pkg_tars}/*";
+    }
+
+    sub build_src_package_directory {
+        my $context = shift;
+
+        # build the exim package directory path
+        $context->{d}{src} = catdir $context->{d}{pkg_trees}, "exim-$context->{v}{release}";
+
+        # initially we move the exim-src directory to the new directory name
+        move
+            catdir( $context->{d}{vcs_export}, 'src')
+            => $context->{d}{src}
+        or croak "Move of src dir failed - $!";
+
+        # add Local subdirectory
+        make_path( catdir( $context->{d}{src}, 'Local' ), { verbose => $verbose || $debug } );
+
+        # now add the text docs
+        $context->move_text_docs_into_pkg;
+    }
+
+    sub build_doc_packages_directory {
+        my $context = shift;
+
+        ##foreach my $format (qw/pdf postscript texinfo info/) {
+        foreach my $format (qw/pdf postscript/) {
+            my $target = catdir $context->{d}{pkg_trees}, "exim-$format-$context->{v}{release}", 'doc';
+            make_path( $target, { verbose => $verbose || $debug } );
+
+            # move documents across
+            foreach my $file (
+                glob(
+                    catfile(
+                        $context->{d}{vcs_export},
+                        'doc',
+                        'doc-docbook',
+                        (
+                            ( $format eq 'postscript' )
+                            ? '*.ps'
+                            : ( '*.' . $format )
+                        )
+                    )
+                )
+            )
+            {
+                move( $file, catfile( $target, ( splitpath($file) )[2] ) );
+            }
+        }
+    }
+
+    sub move_text_docs_into_pkg {
+        my $context = shift;
+
+        my $old_docdir = catdir( $context->{d}{vcs_export}, 'doc', 'doc-docbook' );
+        my $old_txtdir = catdir( $context->{d}{vcs_export}, 'doc', 'doc-txt' );
+        my $new_docdir = catdir( $context->{d}{src}, 'doc' );
+        make_path( $new_docdir, { verbose => $verbose || $debug } );
+
+        # move generated documents from docbook stuff
+        foreach my $file (qw/exim.8 spec.txt filter.txt/) {
+            die "Empty file \"$file\"\n" if -z catfile( $old_docdir, $file );
+            move( catfile( $old_docdir, $file ), catfile( $new_docdir, $file ) );
+        }
+
+        # move text documents across
+        foreach my $file ( glob( catfile( $old_txtdir, '*' ) ) ) {
+
+            # skip a few we dont want
+            my $fn = ( splitpath($file) )[2];
+            next
+            if ( ( $fn eq 'ABOUT' )
+                || ( $fn eq 'ChangeLog.0' )
+                || ( $fn eq 'test-harness.txt' )
+                # Debian issue re licensing of RFCs
+                || ( $fn =~ /^draft-ietf-.*/ )
+                || ( $fn =~ /^rfc.*/ )
+                );
+            move( $file, catfile( $new_docdir, $fn ) );
+        }
+    }
+
+    sub create_tar_files {
+        my $context = shift;
+
+        my $pkg_tars    = $context->{d}{pkg_tars};
+        my $pkg_trees = $context->{d}{pkg_trees};
+        my $tar     = $context->{tar_cmd};
+        if ($verbose) {
+            foreach my $c (keys %{ $context->{compressors} }) {
+                print "Compression: $c\t$context->{compressors}{$c}\n";
+            }
+        }
+
+        # We ideally do not want local system user information in release tarballs;
+        # those are artifacts of use of tar for backups and have no place in
+        # software release packaging; if someone extracts as root, then they should
+        # get sane file ownerships.
+        my @ownership = (
+            '--owner' => $context->{tar_perms}{user},
+            '--group' => $context->{tar_perms}{group},
+            # on this GNU tar, --numeric-owner works during creation too
+            '--numeric-owner'
+        ) if qx/tar --help 2>&1/ =~ /^\s*--owner=/m;
+
+        # See also environment variables set in main, tuning compression levels
+
+        my (%size, %sha256, %sha512);
+
+        foreach my $dir ( glob( catdir( $pkg_trees, ( 'exim*-' . $context->{v}{release} ) ) ) ) {
+            my $dirname = ( splitdir($dir) )[-1];
+            foreach my $comp (keys %{$context->{compressors}}) {
+                my %compressor = %{$context->{compressors}{$comp}};
+                next unless $compressor{use};
+
+                my $basename = "$dirname.tar.$compressor{extension}";
+                my $outfile = catfile $pkg_tars, $basename;
+
+                print "Creating: $outfile\n" if $verbose || $debug;
+                0 == system($tar,
+                    cf => $outfile,
+                        $compressor{flags},
+                        @ownership, -C => $pkg_trees, $dirname)
+                    or exit $? >> 8;
+
+                # calculate size and md5sum
+                $size{$basename} = -s $outfile;
+                $sha256{$basename} = Digest::SHA->new(256)->addfile($outfile)->hexdigest;
+                $sha512{$basename} = Digest::SHA->new(512)->addfile($outfile)->hexdigest;
+            }
+        }
+
+        # write the sizes file
+        if ($context->{sizes}) {
+            for ([ sizes => 'SIZE' => \%size ],
+                 [ sha256sums => 'SHA256' => \%sha256 ],
+                 [ sha512sums => 'SHA512' => \%sha512 ]) {
+
+                my $outfile = catfile $pkg_tars, "00-$_->[0].txt";
+                my $tag = $_->[1];
+                my $sizes = $_->[2];
+
+                open my $out, '>', $outfile
+                    or die "$ME: Can't open `$outfile': $!\n";
+
+                print $out join "\n",
+                    (map { "$tag ($_) = $sizes->{$_}" } sort keys %$sizes),
+                    '';
+
+                close($out) or die "$ME: Can't close $outfile: $!\n";
+            }
+        }
+    }
+
+    sub do_cleanup {
+        my $context = shift;
+
+        print "Cleaning up\n" if $verbose;
+        remove_tree $context->{d}{tmp}, { verbose => $verbose || $debug };
+    }
+
+}
+
+# Check, if tar understands --use-compress-program and use this, as
+# at least gzip deprecated passing options via the environment.
+sub compressor {
+    my ($compressor, $fallback) = @_;
+    state $use_compress_option  =
+        0 == system("tar c -f /dev/null -C / --use-compress-program=cat dev/null 2>/dev/null");
+    return $use_compress_option
+        ? "--use-compress-program=$compressor"
+        : ref $fallback eq ref sub {} ? $fallback->() : $fallback;
+}
+
+MAIN: {
+
+    # some of these settings are useful only if we're in the
+    # exim-projekt-root, but the check, if we're, is deferred
+    my $context = Context->new(
+        pkgname     => 'exim',
+        website_base => abs_path('../exim-website'),
+        tar_cmd     => 'tar',
+        tar_perms   => {
+                user    => '0',
+                group   => '0',
+        },
+        make_cmd    => 'make',  # for 'make'ing the docs
+        sizes       => 1,
+        compressors => {
+            gzip  => { use => 1, extension => 'gz',  flags => compressor('gzip -9', sub { $ENV{GZIP} = '-9'; '--gzip' }) },
+            bzip2 => { use => 1, extension => 'bz2', flags => compressor('bzip2 -9', sub { $ENV{BZIP2} = '-9'; '--bzip2' }) },
+            xz    => { use => 1, extension => 'xz',  flags => compressor('xz -9', sub { $ENV{XZ_OPT} = '-9'; '--xz' }) },
+            lzip  => { use => 0, extension => 'lz',  flags => compressor('lzip -9', '--lzip') },
+        },
+        docs         => 1,
+        web          => 1,
+        delete       => 0,
+        cleanup      => 1,
+        gpg => {
+            sign         => 1,
+            key          => undef,
+        },
+        quick => 0,
+    );
+
+    ##$ENV{'PATH'} = '/opt/local/bin:' . $ENV{'PATH'};
+
+    GetOptions(
+        $context,
+        qw(workspace|tmp=s website_base|webgen_base=s tar_cmd|tar-cmd=s make_cmd|make-cmd=s
+           docs|build-docs! web|build-web! sizes!
+           delete! cleanup! quick|quick-release! minimal),
+        'sign!'         => \$context->{gpg}{sign},
+        'key=s'         => \$context->{gpg}{key},
+        'verbose!'      => \$verbose,
+        'compressors=s@' => sub {
+            die "$0: can't parse compressors string `$_[1]'\n" unless $_[1] =~ /^[+=-]?\w+(?:[+=-]\w+)*$/;
+            while ($_[1] =~ /(?<act>[+=-])?(?<name>\w+)\b/g) {
+                die "$0: Unknown compressor $+{name}"
+                    unless $context->{compressors}{$+{name}};
+                if (not defined $+{act} or $+{act} eq '=') {
+                    $_->{use} = 0
+                        for values %{$context->{compressors}};
+                    $context->{compressors}{$+{name}}{use}++;
+                }
+                elsif ($+{act} eq '+') { $context->{compressors}{$+{name}}{use}++; }
+                elsif ($+{act} eq '-') { $context->{compressors}{$+{name}}{use}--; }
+            }
+        },
+        'debug:s'       => \$debug,
+        'quick'         => sub { $context->{web}--; $context->{quick} = 1 },
+        'help|?'        => sub { pod2usage(-verbose => 1, -exit => 0) },
+        'man!'          => sub { pod2usage(-verbose => 2, -exit => 0, -noperldoc => system('perldoc -V >/dev/null 2>&1')) },
+    ) and (@ARGV == 2 or ($context->{quick} and @ARGV >= 1))
+        or pod2usage;
+
+    -f '.exim-project-root'
+        or die "$ME: please call this script from the root of the Exim project sources\n";
+
+    $context->{OUTDIR} = pop @ARGV;
+
+    if ($context->{gpg}{sign}) {
+        $context->{gpg}{key} //= do { chomp($_ = qx/git config user.signingkey/); $_ }
+            || $ENV{EXIM_KEY}
+            || do {
+                warn "$ME: No GPG key, using default\n";
+                undef;
+            }
+    }
+
+
+    warn "$ME: changed umask to 022\n" if umask(022) != 022;
+
+    $context->check_version(shift); # may be undef for a quick release
+
+    if ($debug//'' eq 'version') {
+        for (sort keys %{$context->{v}}) {
+            print "version $_: $context->{v}{$_}\n";
+        }
+        print "git commit: $context->{commit}\n";
+        exit 0;
+    }
+    $context->override_tar_cmd;
+    $context->prepare_working_directory;
+    $context->export_git_tree;
+    $context->unpack_tree;
+    $context->make_version_script;
+
+    $context->build_documentation if $context->{docs};
+    $context->build_html_documentation if $context->{docs} && $context->{web};
+
+    $context->build_src_package_directory;
+    $context->build_doc_packages_directory if $context->{docs};
+
+    $context->create_tar_files;
+    $context->sign if $context->{gpg}{sign};
+    $context->move_to_outdir;
+    $context->do_cleanup if $context->{cleanup};
+
+    ### $context
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+mk_exim_release - Build an exim release
+
+=head1 SYNOPSIS
+
+ mk_exim_release [options] version PKG-DIRECTORY
+ mk_exim_release [options] --quick [version] PKG-DIRECTORY
+
+=head1 DESCRIPTION
+
+B<mk_exim_release> builds an exim release.
+
+Starting in a populated git repo that has already been tagged for
+release it builds docs, packages etc.  Parameter is the version number
+to build as - ie 4.72 4.72-RC1, 4.86.1, etc, without any prefix.
+
+This scripts expects to find a tag "exim-<version>".
+
+After creating the release files, they should be signed. There is another
+helper for creating the signatures:
+F<release-process/scripts/sign_exim_packages>.
+
+Call B<mk_exim_release> about like this:
+
+    release-process/scripts/mk_exim_release 4.99 OUT-DIR
+
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--[no]cleanup>
+
+Do (or do not) cleanup the tmp directory at exit (default: do cleanup)
+
+=item B<--compressors> [I<action>]I<compressor[I<action>$<compressor>]...
+
+A list of compressors to use. Currently the default list is
+B<gzip>, B<xz>, and B<bzip2>, with B<lzip> optionally to be enabled.
+
+I<action> can be "+" (add), "-" (remove), and "=" (set).
+
+=item B<--debug[=I<item>]>
+
+Forces debug mode. If (default: no debug info)
+
+=over 4
+
+=item item: B<version>
+
+Output the parsed/found version number and exit.
+
+=back
+
+=item B<--[no]delete>
+
+Delete a pre-existing tmp- and package-directory at start. (default: don't delete)
+
+=item B<--[no]doc>
+
+Do (not) build the documentation. This needs C<gnu-make> (default: build the docs)
+
+=item B<--[no]help>
+
+Display short help and exit cleanly. (default: don't do that)
+
+=item B<--key> I<GPG key>
+
+Use this GPG key for signing. If nothing is specified the first one of this list
+is used:
+
+=over 8
+
+=item - git config user.signingkey
+
+=item - environment C<EXIM_KEY>
+
+=item - default GPG key
+
+=back
+
+=item B<--make-cmd> I<cmd>
+
+Force the use of a specific C<make> command. This may be necessary if C<make> is not
+C<gmake>. This is necessary to build the docs. (default: C<make>)
+
+=item B<--[no]man>
+
+Display man page and exit cleanly. (default: don't do that)
+
+=item B<--quick>
+
+Create a quick release. The I<version> mandatory argument needs to be a git commit-ish.
+(try I<master> or I<HEAD> or similar). This mode switches off the
+website creation (which can be enabled by B<--web> again).
+
+=item B<--[no]sign>
+
+Sign the created archive files (and the sizes.txt). (default: sign)
+
+=item B<--[no]sizes>
+
+Write the sizes information to F<sizes.txt>. (default: write sizes)
+
+=item B<--tar-cmd> I<cmd>
+
+Use to override the path to the C<tar> command.  Need GNU tar in case
+I<lzip> is selected. (default: C<gtar>, if not found, use C<tar>).
+
+=item B<--tmpdir> I<dir>
+
+Change the name of the tmp directory (default: temporary directory)
+
+=item B<--verbose>
+
+Force verbose mode. (default: no verbosity)
+
+=item B<--[no]web>
+
+Control the creation of the website. For creation of the website, the F<../exim-website>
+(but see the B<website-base> option) directory must exist. (default: create the website, except when
+in B<quick> mode)
+
+=item B<--website-base> I<dir>
+
+Base directory for the web site generation (default: F<../exim-website>)
+
+=item B<-workspace>|B<--tmp> I<directory>
+
+During release gerneration temporary storage is necessary. (default: F<exim-packaging-XXXX>
+under your system's default temporary directory (typically this is F</tmp>)).
+
+=back
+
+=head1 AUTHOR
+
+Nigel Metheringham <Nigel.Metheringham@dev.intechnology.co.uk>,
+some changes by Heiko Schlittermann <hs@schlittermann.de>
+
+=head1 COPYRIGHT
+
+Copyright 2010-2016 Exim Maintainers. All rights reserved.
+
+=cut
+# vim: set sw=4 et :

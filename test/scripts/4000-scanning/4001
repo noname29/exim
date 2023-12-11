@@ -1,0 +1,72 @@
+# multiple messages in connection
+
+exim -bh 127.0.0.1
+EHLO mailserver.test
+MAIL FROM:<sender@test.ex>
+RCPT TO:<heiko@test.ex>
+DATA
+From: sender@test.ex
+To: heiko@test.ex
+Subject: test no attachment
+
+This is a test mailing
+
+.
+MAIL FROM:<sender@test.ex>
+RCPT TO:<heiko@test.ex>
+DATA
+From: sender@test.ex
+To: heiko@test.ex
+Subject: test with attachment
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="----=_MIME_BOUNDARY_000_431036"
+
+------=_MIME_BOUNDARY_000_431036
+Content-Type: text/plain
+
+This is a test mailing
+------=_MIME_BOUNDARY_000_431036
+Content-Type: application/octet-stream
+Content-Disposition: attachment
+Content-Transfer-Encoding: BASE64
+
+U2F0IEZlYiAyOSAxNDo1ODowMyBDRVQgMjAyMAo=
+
+------=_MIME_BOUNDARY_000_431036--
+
+.
+MAIL FROM:<sender@test.ex>
+RCPT TO:<heiko@test.ex>
+DATA
+From: sender@test.ex
+To: heiko@test.ex
+Subject: test with attachment
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="----=_MIME_BOUNDARY_000_431036"
+
+------=_MIME_BOUNDARY_000_431036
+Content-Type: text/plain
+
+This is a test mailing
+------=_MIME_BOUNDARY_000_431036
+Content-Type: application/octet-stream
+Content-Disposition: attachment
+Content-Transfer-Encoding: BASE64
+
+U2F0IEZlYiAyOSAxNDo1ODowMyBDRVQgMjAyMAo=
+
+------=_MIME_BOUNDARY_000_431036--
+
+.
+MAIL FROM:<sender@test.ex>
+RCPT TO:<heiko@test.ex>
+DATA
+From: sender@test.ex
+To: heiko@test.ex
+Subject: test no attachment
+
+This is a test mailing ($(date "+%F %T"))
+
+.
+QUIT
+****

@@ -1,0 +1,3 @@
+support PIPECONNECT
+support GnuTLS
+support TCP_Fast_Open
