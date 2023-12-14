@@ -15,7 +15,6 @@
 static const uschar *last_comment_position;
 
 
-
 /* In stand-alone mode, provide a replacement for deliver_make_addr()
 and rewrite_address[_qualify]() so as to avoid having to drag in too much
 redundant apparatus. */
@@ -67,11 +66,14 @@ Returns:   pointer past the end of the address
            (i.e. points to null or comma)
 */
 
+
 uschar *
 parse_find_address_end(const uschar *s, BOOL nl_ends)
 {
 BOOL source_routing = *s == '@';
 int no_term = source_routing? 1 : 0;
+
+printf("uschar *s value %s", s);
 
 while (*s != 0 && (*s != ',' || no_term > 0) && (*s != '\n' || !nl_ends))
   {
@@ -630,7 +632,9 @@ uschar *
 parse_extract_address(const uschar *mailbox, uschar **errorptr, int *start, int *end,
   int *domain, BOOL allow_null)
 {
+printf("mailbox: %s\n", mailbox);
 uschar * yield = store_get(Ustrlen(mailbox) + 1, mailbox);
+printf("yield after store_get function: %s\n", yield);
 const uschar *startptr, *endptr;
 const uschar *s = US mailbox;
 uschar *t = US yield;
@@ -1247,6 +1251,8 @@ parse_forward_list(const uschar *s, int options, address_item **anchor,
   uschar **error, const uschar *incoming_domain, const uschar *directory,
   error_block **syntax_errors)
 {
+printf("parse_forward_list \n");
+
 int count = 0;
 
 DEBUG(D_route) debug_printf("parse_forward_list: %s\n", s);
@@ -1592,6 +1598,8 @@ for (;;)
 
   else
     {
+
+     printf ("else from not :include");
     int start, end, domain;
     const uschar *recipient = NULL;
     uschar * s_ltd = string_copyn(s, len);
